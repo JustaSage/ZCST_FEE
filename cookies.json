@@ -1,7 +1,7 @@
 [
   {
     "name": "JSESSIONID",
-    "value": "54B246BD018CB3F15FF5D8F10856ABB0",
+    "value": "1BD46607C1E78DD788DA60EDF4A804D1",
     "domain": "my.zcst.edu.cn",
     "path": "/"
   },
@@ -9,6 +9,30 @@
     "name": "SESSION",
     "value": "f6249301-6484-429c-8385-63c66778a9cb",
     "domain": "sos.zcst.edu.cn",
+    "path": "/"
+  },
+  {
+    "name": "route",
+    "value": "222fce2c13d2ad870acf9402212ccbe2",
+    "domain": "mucp.zcst.edu.cn",
+    "path": "/"
+  },
+  {
+    "name": "JSESSIONID",
+    "value": "EABBE0F910DA87F888360A2EC98AEA08",
+    "domain": "mucp.zcst.edu.cn",
+    "path": "/"
+  },
+  {
+    "name": "SESSION",
+    "value": "NGZiYTMxMWQtNTY4YS00NDFlLWI2MDAtZGY2MDllZmYzMWIw",
+    "domain": "self.zcst.edu.cn",
+    "path": "/"
+  },
+  {
+    "name": "sduuid",
+    "value": "8396de732ab817bd1075d075e8e8c2f2",
+    "domain": ".zcst.edu.cn",
     "path": "/"
   }
 ]

@@ -66,13 +66,19 @@ def init_client_config(session):
         "os": "12",
         "mobileType": "Pixel 6",
     }
-    try:
-        resp = session.post(url, data=data, timeout=30)
-        resp.raise_for_status()
-        result = resp.json()
-    except Exception as e:
-        print(f"  [!] 初始化请求失败: {e}")
-        return None
+    for attempt in range(2):
+        try:
+            resp = session.post(url, data=data, timeout=30)
+            resp.raise_for_status()
+            result = resp.json()
+            break
+        except Exception as e:
+            if attempt == 0:
+                print(f"  [!] 第1次请求失败, 重试中...")
+                time.sleep(2)
+            else:
+                print(f"  [!] 初始化请求失败: {e}")
+                return None
 
     if str(result.get("result")) != "1":
         print(f"  [!] 初始化失败: {result.get('failReason', '未知错误')}")
@@ -223,22 +229,22 @@ def login_via_browser(session, server_info):
     print()
 
     # 等待登录完成
-    # 流程: mucp.zcst.edu.cn/_web/appWebLogin.jsp → 重定向到 sos.zcst.edu.cn/login
-    # 用户在 sos.zcst.edu.cn 完成认证 (含验证码) 后:
-    #   - WebView 模式: JS 回调 closeWindow, 包含 ssoCookie/user/userPwd
-    #   - 页面可能跳转回门户或显示成功状态
-    # 在 Selenium 中, 监控:
-    #   1. URL 从 sos.zcst.edu.cn 跳转离开 (不包含 /login 路径)
-    #   2. 页面 title 变化 (不再是登录页)
-    #   3. 出现 CASTGC 等 SSO cookie
+    # 完整流程:
+    #   1. 加载 mucp.zcst.edu.cn/_web/appWebLogin.jsp
+    #   2. 重定向到 sos.zcst.edu.cn/login (SSO 登录页)
+    #   3. 用户完成认证 (含验证码)
+    #   4. 重定向回 mucp.zcst.edu.cn/_web/appWebLogin.jsp (带登录结果)
+    #   5. appWebLogin.jsp 通过 JS Bridge 调用 closeWindow(result, cookies)
+    # 关键: 检测从 SSO 页面跳回 appWebLogin.jsp 即为登录成功
     login_success = False
     max_wait = 300  # 最多等待 5 分钟
     start_time = time.time()
 
-    # 等待页面初始加载 (appWebLogin.jsp → sos.zcst.edu.cn 重定向)
+    # 等待页面初始加载
     time.sleep(3)
 
-    # 记录 SSO 登录域名 (sos.zcst.edu.cn)
+    # 追踪是否访问过 SSO 页面 (sos.zcst.edu.cn)
+    visited_sso = False
     sso_hosts = {SSO_DOMAIN, "sos.zcst.edu.cn"}
 
     while time.time() - start_time < max_wait:
@@ -252,24 +258,20 @@ def login_via_browser(session, server_info):
         current_host = urlparse(current_url).netloc
         current_path = urlparse(current_url).path
 
+        # 记录是否到达过 SSO 页面
+        if current_host in sso_hosts:
+            visited_sso = True
+
         # 判断登录成功:
-        # 条件1: URL 已不在 sos.zcst.edu.cn 且不在 mucp.zcst.edu.cn 的登录路径
-        #   (即跳回了门户或其他页面)
-        if current_host not in sso_hosts:
-            if "_web/appWebLogin" not in current_path:
-                cookies = driver.get_cookies()
-                if cookies:
-                    login_success = True
-                    break
+        # 核心条件: 曾经到 SSO 页面, 现在又回到了 appWebLogin.jsp
+        #   (说明 SSO 认证完成, 页面跳回来了)
+        if visited_sso and current_host not in sso_hosts:
+            # 回到了 mucp 域名, 等一小会让页面执行 JS
+            time.sleep(2)
+            login_success = True
+            break
 
-        # 条件2: 仍在 SSO 域名, 但路径不再是 /login (认证完跳转)
-        if current_host in sso_hosts and "/login" not in current_path.lower():
-            cookies = driver.get_cookies()
-            if len(cookies) >= 2:
-                login_success = True
-                break
-
-        # 条件3: 出现 CASTGC 等 SSO 认证成功后的 cookie
+        # 备用条件: 出现 CASTGC 等 SSO 认证成功 cookie
         try:
             page_cookies = driver.get_cookies()
             cookie_names = {c["name"] for c in page_cookies}
@@ -281,7 +283,7 @@ def login_via_browser(session, server_info):
         except Exception:
             pass
 
-        # 条件4: 检查 JS Bridge 回调 (WebView 模式下 closeWindow 被调用)
+        # 备用条件: JS Bridge 回调被触发
         try:
             result = driver.execute_script(
                 "return window._loginResult || null;")
@@ -291,7 +293,7 @@ def login_via_browser(session, server_info):
         except Exception:
             pass
 
-        # 持续注入 JS Bridge (页面跳转后可能丢失)
+        # 持续注入 JS Bridge (页面跳转后会丢失)
         try:
             driver.execute_script("""
                 if (!window.myLoginJsCall) {
@@ -345,9 +347,8 @@ def login_via_browser(session, server_info):
         except Exception:
             pass
 
-    driver.quit()
-
     # 去重并转移 Cookie 到 requests session
+    # 注意: 浏览器保持开启, 供后续 open_fee_page 跟随 CAS 重定向
     seen = set()
     for cookie in selenium_cookies:
         key = (cookie["name"], cookie.get("domain", ""))
@@ -362,7 +363,7 @@ def login_via_browser(session, server_info):
         )
 
     print(f"  [✓] 已获取 {len(seen)} 个 Cookie")
-    return True
+    return driver  # 返回 driver (浏览器保持开启)
 
 
 def get_user_info(session, server_info):
@@ -561,7 +562,7 @@ def fetch_app_list(session, user_info):
     return unique_apps, water_apps
 
 
-def open_fee_page(session, server_info, user_info, app, unique_apps):
+def open_fee_page(session, server_info, user_info, app, unique_apps, driver=None):
     """
     Step 5: 打开水电费页面
     对应 OpenLightAppUtil.normalOpenApp → openAppOnNet → buildSignUrlParam
@@ -622,38 +623,97 @@ def open_fee_page(session, server_info, user_info, app, unique_apps):
     separator = "&" if "?" in main_url else "?"
     full_url = f"{main_url}{separator}{urlencode(url_params)}" if url_params else main_url
 
-    print(f"\n  *** 完整水电费页面 URL ***")
-    print(f"  {full_url}")
+    # Step 5c: 用浏览器跟随 CAS 重定向获取最终直连链接
+    # 原理: 浏览器持有登录后的 TGT Cookie (在 sos.zcst.edu.cn 上)
+    #   导航到 full_url → CAS 签发 service ticket
+    #   → 重定向到 hub.17wanxiao.com/...?ticket=ST-xxx
+    #   该 URL 可直接在任意浏览器打开, 无需统一认证
+    direct_url = None
+    print("\n  [→] 用浏览器跟随统一认证跳转, 获取直连链接...")
 
-    # Step 5c: 请求页面内容
-    print("\n  [→] 请求页面内容...")
-    try:
-        resp = session.get(full_url, timeout=15, allow_redirects=True)
-        print(f"  HTTP {resp.status_code}, 内容长度: {len(resp.text)} 字符")
+    if driver:
+        try:
+            driver.get(full_url)
+            # 跳转分两段:
+            #   1. sos.zcst.edu.cn → hub.17wanxiao.com/...?ticket=ST-xxx  (CAS ticket, 一次性)
+            #   2. hub.17wanxiao.com → xqh5.17wanxiao.com/...#/?params=... (加密参数, 可复用)
+            # 必须等到第 2 段完成才获取 URL, 否则 ticket 被消费后就无法使用
+            # 最多等 40 秒
+            for _ in range(40):
+                current = driver.current_url
+                # 已到达最终落地页: 含 params= 或在 xqh5 子域
+                if "params=" in current or "xqh5.17wanxiao.com" in current:
+                    time.sleep(1)  # 等 JS 渲染完整 hash
+                    direct_url = driver.current_url
+                    break
+                time.sleep(1)
+            if not direct_url:
+                # 降级: 至少返回停留的 URL
+                current = driver.current_url
+                print(f"  [!] 未到达最终落地页, 当前停在: {current}")
+                if "17wanxiao.com" in current:
+                    direct_url = current  # hub URL (ticket 已消费, 仅记录)
+        except Exception as e:
+            print(f"  [!] 浏览器跳转失败: {e}")
+        finally:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+    else:
+        # 无浏览器 (使用缓存 Cookie 路径), 尝试 requests 跟随
+        try:
+            resp = session.get(full_url, timeout=20, allow_redirects=True)
+            final_url = resp.url
+            if "17wanxiao.com" in final_url:
+                direct_url = final_url
+            elif final_url != full_url:
+                direct_url = final_url
+            output_dir = os.path.dirname(os.path.abspath(__file__))
+            html_path = os.path.join(output_dir, "fee_page.html")
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(resp.text)
+            print(f"  HTTP {resp.status_code}, 最终 URL: {final_url}")
+        except Exception as e:
+            print(f"  [!] 请求跟随失败: {e}")
 
-        # 保存到文件
-        output_dir = os.path.dirname(os.path.abspath(__file__))
-        html_path = os.path.join(output_dir, "fee_page.html")
-        with open(html_path, "w", encoding="utf-8") as f:
-            f.write(resp.text)
-        print(f"  [✓] 页面已保存到: {html_path}")
+    # 输出结果
+    print()
+    print("  " + "─" * 52)
+    if direct_url and ("xqh5.17wanxiao.com" in direct_url or "params=" in direct_url):
+        print(f"  ✅ 直连链接 (可直接在浏览器打开):")
+        print(f"  {direct_url}")
+    elif direct_url and "17wanxiao.com" in direct_url:
+        print(f"  ✅ 最终链接:")
+        print(f"  {direct_url}")
+    else:
+        print(f"  ⚠️  无法自动获取直连链接 (CAS 认证 Cookie 可能缺失)")
+        print(f"  中转链接 (统一认证后可访问):")
+        print(f"  {full_url}")
+    print("  " + "─" * 52)
 
-        # 如果被重定向, 打印最终 URL
-        if resp.url != full_url:
-            print(f"  [→] 重定向到: {resp.url}")
+    return direct_url or full_url
 
-    except Exception as e:
-        print(f"  [!] 请求失败: {e}")
 
-    return full_url
+# 优先匹配的应用名称
+PREFERRED_APP_NAMES = ["智能水电", "智慧水电", "水电费", "能源管理"]
 
 
 def select_app_interactively(unique_apps, water_apps):
-    """让用户交互选择要打开的应用"""
+    """选择要打开的应用, 优先自动匹配智能水电"""
+    # 优先从所有应用中精确匹配「智能水电」等已知名称
+    for preferred in PREFERRED_APP_NAMES:
+        for app in unique_apps:
+            name = app.get("name", app.get("appName", ""))
+            if name == preferred:
+                print(f"\n  [✓] 自动选择应用: {name}")
+                return app
+
+    # 其次从水电相关应用中匹配
     if water_apps:
         if len(water_apps) == 1:
-            print(f"\n  自动选择唯一的水电应用: "
-                  f"{water_apps[0].get('name', water_apps[0].get('appName', ''))}")
+            name = water_apps[0].get('name', water_apps[0].get('appName', ''))
+            print(f"\n  [✓] 自动选择应用: {name}")
             return water_apps[0]
 
         print("\n  找到多个水电相关应用, 请选择:")
@@ -669,7 +729,7 @@ def select_app_interactively(unique_apps, water_apps):
                 pass
             print("  无效输入, 请重试")
 
-    # 没有自动匹配到, 让用户从全部列表选择
+    # 没有匹配到, 让用户从全部列表选择
     if not unique_apps:
         print("\n  [!] 没有获取到任何应用")
         return None
@@ -734,13 +794,17 @@ def main():
     # Step 1: 初始化配置
     server_info = init_client_config(session)
     if not server_info:
-        print("  [!] 无法获取服务端配置, 使用默认配置继续...")
+        print("  [!] 无法获取服务端配置, 使用已知默认值继续...")
         server_info = {
-            "host": BASE_URL,
-            "mi_host": "",
+            "host": "https://zx.zcst.edu.cn",
+            "mi_host": "https://mucp.zcst.edu.cn",
+            "mi_ssl": "https://mucp.zcst.edu.cn",
             "login_url": "",
             "redirect_url": "",
-            "ids_host": "",
+            "ids_host": "https://mucp.zcst.edu.cn",
+            "ucp_host": "https://mucp.zcst.edu.cn",
+            "login_type": "WebView",
+            "app_url": BASE_URL,
         }
 
     # 检查是否有缓存的 Cookie
@@ -753,9 +817,10 @@ def main():
                 print("  [✓] Cookie 有效, 跳过登录")
 
     # Step 2: 如果没有有效会话, 进行浏览器登录
+    login_driver = None
     if not user_info:
-        login_result = login_via_browser(session, server_info)
-        if not login_result:
+        login_driver = login_via_browser(session, server_info)
+        if not login_driver:
             print("\n[!] 登录失败, 程序退出")
             sys.exit(1)
 
@@ -769,21 +834,29 @@ def main():
     # Step 4: 拉取应用列表
     unique_apps, water_apps = fetch_app_list(session, user_info)
 
-    # 交互选择应用
+    # 自动选择应用 (无需交互)
     target_app = select_app_interactively(unique_apps, water_apps)
     if not target_app:
-        print("\n未选择应用, 程序退出")
+        if login_driver:
+            try:
+                login_driver.quit()
+            except Exception:
+                pass
+        print("\n未找到目标应用, 程序退出")
         sys.exit(0)
 
-    # Step 5: 打开水电页面
+    # Step 5: 打开水电页面 (传入 driver 以通过浏览器跟随 CAS 重定向)
     full_url = open_fee_page(session, server_info, user_info,
-                             target_app, unique_apps)
+                             target_app, unique_apps, driver=login_driver)
 
     print("\n" + "=" * 56)
     print("  完成!")
     if full_url:
-        print(f"\n  你也可以在浏览器中手动打开以下 URL")
-        print(f"  (需要先登录 {BASE_URL}):")
+        is_direct = full_url and "17wanxiao.com" in full_url
+        if is_direct:
+            print(f"\n  直连链接 (无需统一认证, 可直接在浏览器打开):")
+        else:
+            print(f"\n  链接 (若打不开请先确保已登录 {BASE_URL}):")
         print(f"  {full_url}")
     print("=" * 56)
 
