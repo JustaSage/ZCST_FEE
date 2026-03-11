@@ -34,14 +34,14 @@ if platform.system() == "Windows":
 else:
     args += ["--console"]
 
-print(f"[build] 平台: {platform.system()} {platform.machine()}")
-print(f"[build] 命令: {' '.join(args)}")
+print(f"[build] Platform: {platform.system()} {platform.machine()}")
+print(f"[build] Command: {' '.join(args)}")
 print()
 
 result = subprocess.run(args, check=False)
 if result.returncode != 0:
-    print(f"\n[build] ❌ 编译失败 (exit {result.returncode})")
+    print(f"\n[build] FAILED (exit {result.returncode})")
     sys.exit(result.returncode)
 
 output = Path(DIST_DIR) / (APP_NAME + (".exe" if platform.system() == "Windows" else ""))
-print(f"\n[build] ✅ 编译成功: {output.resolve()}")
+print(f"\n[build] OK: {output.resolve()}")
