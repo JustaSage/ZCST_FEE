@@ -14,21 +14,42 @@
 
 ## 环境要求
 
-- Python 3.8+
+- Python 3.12+
 - Chrome 或 Firefox 浏览器
 
-## 安装
+## 安装与运行（Windows）
 
-```bash
+### 方式一：使用 uv（推荐）
+
+[uv](https://docs.astral.sh/uv/) 会自动管理 Python 版本和虚拟环境：
+
+```powershell
+# 1. 安装 uv（若未安装）
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# 2. 在项目目录安装依赖
+cd ZCST_FEE
+uv sync
+
+# 3. 运行
+uv run python main.py
+```
+
+或者直接双击 `run.bat` 文件。
+
+### 方式二：使用 pip
+
+```powershell
 cd ZCST_FEE
 pip install -r requirements.txt
-```
-
-## 使用
-
-```bash
 python main.py
 ```
+
+> **注意**：如果使用 VS Code，请确保在右下角选择 `.venv` 中的 Python 解释器（`.venv\Scripts\python.exe`），而不是系统 Python，否则会因找不到依赖包而报错。
+
+## 使用步骤
+
+## 使用步骤
 
 程序会：
 1. 自动获取服务端配置
@@ -49,6 +70,8 @@ python main.py
 | 文件 | 用途 |
 |------|------|
 | `main.py` | 主程序 |
-| `requirements.txt` | Python 依赖 |
+| `run.bat` | Windows 一键启动脚本 |
+| `requirements.txt` | Python 依赖（pip 用） |
+| `pyproject.toml` | 项目配置（uv 用） |
 | `cookies.json` | (运行后生成) 登录 Cookie 缓存 |
 | `fee_page.html` | (运行后生成) 水电费页面 HTML |

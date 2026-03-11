@@ -17,6 +17,11 @@ import time
 import uuid
 from urllib.parse import urlencode, urlparse
 
+# Windows 终端 UTF-8 输出保障（避免非 UTF-8 代码页下中文/Unicode 符号乱码）
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import requests
 
 # ============================================================
