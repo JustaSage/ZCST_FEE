@@ -16,6 +16,31 @@ APP_NAME = "zcst-fee"
 DIST_DIR = "dist"
 
 # PyInstaller 通用参数
+HIDDEN_IMPORTS = [
+    # selenium — 运行时动态导入的子模块
+    "selenium.webdriver.chrome.webdriver",
+    "selenium.webdriver.chrome.service",
+    "selenium.webdriver.chrome.options",
+    "selenium.webdriver.chromium.webdriver",
+    "selenium.webdriver.remote.webdriver",
+    "selenium.webdriver.remote.command",
+    "selenium.webdriver.common.by",
+    "selenium.webdriver.common.keys",
+    "selenium.webdriver.common.action_chains",
+    "selenium.webdriver.support.ui",
+    "selenium.webdriver.support.expected_conditions",
+    "selenium.webdriver.support.wait",
+    # webdriver_manager — 动态加载的平台驱动
+    "webdriver_manager.chrome",
+    "webdriver_manager.core.driver_cache",
+    "webdriver_manager.core.download_manager",
+    "webdriver_manager.core.file_manager",
+    "webdriver_manager.core.logger",
+    "webdriver_manager.core.manager",
+    "webdriver_manager.core.os_manager",
+    "webdriver_manager.drivers.chrome",
+]
+
 args = [
     sys.executable, "-m", "PyInstaller",
     "--onefile",
@@ -25,14 +50,13 @@ args = [
     "--specpath", "build",
     "--noconfirm",
     "--clean",
-    ENTRY,
 ]
+for hi in HIDDEN_IMPORTS:
+    args += ["--hidden-import", hi]
+args += [ENTRY]
 
-if platform.system() == "Windows":
-    # Windows: 控制台程序（需要控制台交互输入账号密码）
-    args += ["--console"]
-else:
-    args += ["--console"]
+# 控制台程序（需要交互输入账号/密码）
+args += ["--console"]
 
 print(f"[build] Platform: {platform.system()} {platform.machine()}")
 print(f"[build] Command: {' '.join(args)}")
