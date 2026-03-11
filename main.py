@@ -23,7 +23,7 @@ if sys.platform == "win32":
 import requests
 
 # ============================================================
-# 配置常量 (从反编译 APK 中提取)
+# 配置常量 
 # ============================================================
 BASE_URL = "https://my.zcst.edu.cn"
 SSO_DOMAIN = "sos.zcst.edu.cn"       # 统一认证 SSO Cookie 域名 (硬编码于 OauthLoginActivity)
@@ -483,7 +483,7 @@ def main():
     print("=" * 56)
     print()
     # 提前收集登录凭据 (登录前就输入, 无需在浏览器页面操作)
-    print("请输入统一认证登录信息 (账号密码无需验证码):")
+    print("请输入统一认证登录信息:")
     username = input("  账号 (学号/工号): ").strip()
     password = getpass.getpass("  密码: ")
     if not username or not password:

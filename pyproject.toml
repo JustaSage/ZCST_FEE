@@ -1,10 +1,15 @@
 [project]
 name = "zcst-fee"
 version = "0.1.0"
-description = "Add your description here"
+description = "ZCST 移动门户统一认证登录 & 水电费查询工具"
 requires-python = ">=3.12"
 dependencies = [
     "requests>=2.32.5",
     "selenium>=4.41.0",
     "webdriver-manager>=4.0.2",
+]
+
+[dependency-groups]
+build = [
+    "pyinstaller>=6.0.0",
 ]

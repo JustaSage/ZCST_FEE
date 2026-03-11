@@ -1,0 +1,88 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: zcst-fee.exe
+          - os: ubuntu-latest
+            artifact: zcst-fee
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install dependencies (including PyInstaller)
+        run: uv sync --group build
+
+      - name: Build executable
+        run: uv run python build.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: zcst-fee.exe
+          path: artifacts/
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: zcst-fee
+          path: artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "ZCST 水电费查询工具 ${{ github.ref_name }}"
+          body: |
+            ## 下载
+
+            | 平台 | 文件 |
+            |------|------|
+            | Windows | `zcst-fee.exe` |
+            | Linux   | `zcst-fee`     |
+
+            ## 使用方式
+
+            直接运行可执行文件，按提示输入学号/工号及密码即可（**无需 Python 环境**）。
+
+            > 运行时需要本机已安装 Chrome 浏览器。
+          files: |
+            artifacts/zcst-fee.exe
+            artifacts/zcst-fee
+          draft: false
+          prerelease: false

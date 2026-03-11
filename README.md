@@ -1,69 +1,80 @@
 # ZCST 水电费查询工具
 
-模拟 MyZCST APP 客户端行为，完成统一认证登录后拉取应用列表并打开水电费页面。
+[![Build & Release](https://github.com/JustaSage/ZCST_FEE/actions/workflows/release.yml/badge.svg)](https://github.com/JustaSage/ZCST_FEE/actions/workflows/release.yml)
+
+通过模拟 MyZCST APP 客户端，自动完成统一认证登录（账号密码），并获取智能水电费直链。
+
+## 下载
+
+前往 [Releases](https://github.com/yourusername/ZCST_FEE/releases) 页面下载对应平台的可执行文件（无需安装 Python）：
+
+| 平台    | 文件          |
+|---------|---------------|
+| Windows | `zcst-fee.exe` |
+| Linux   | `zcst-fee`     |
+
+> 运行时需要本机已安装 **Chrome 浏览器**（webdriver-manager 会自动下载匹配的 ChromeDriver）。
+
+## 使用方式
+
+```
+./zcst-fee          # Linux
+zcst-fee.exe        # Windows（双击或在终端运行）
+```
+
+程序启动后：
+
+1. 提示输入**学号/工号**和**密码**（密码不回显）
+2. 自动弹出 Chrome 窗口，模拟 APP WebView 访问统一认证页面
+3. 自动填充账号密码并提交（账号密码登录无需验证码）
+4. 检测到认证成功后提取 TGT Cookie
+5. 跟随 CAS 跳转获取智能水电直连链接并打印到终端
 
 ## 原理
 
-通过反编译 MyZCST APK 得到的接口信息：
+通过分析 我的珠科 APK 得到的接口：
 
-1. **初始化**: `POST /mobile/initClientConfig21_1.mo` → 获取 IDS 服务器地址
-2. **登录**: 弹出浏览器加载统一认证页面 `/_web/appWebLogin.jsp`，用户手动完成验证码登录
-3. **获取用户**: `POST /_ids_mobile/loginedUser15` → 获取当前用户信息
-4. **拉取应用**: 多个 API 并行查询（`queryIndexApps`, `getDefaultInstallApps`, `queryApp` 等）
-5. **打开水电**: 调用 `POST /mobile/openApp20.mo` 获取签名，拼接 `iportal.*` 参数后访问目标 URL
+1. `POST /mobile/initClientConfig21_1.mo` — 获取 IDS 服务器地址
+2. Selenium 驱动 Chrome 访问 `/_web/appWebLogin.jsp` → 统一认证 SSO → 自动填充登录
+3. 捕获 TGT Cookie 后导航到智能水电入口（`sos.zcst.edu.cn/login?service=…`）
+4. 跟随 CAS Ticket 重定向最终到达 `xqh5.17wanxiao.com/…#/?params=…`
 
-## 环境要求
+目标应用：**智能水电**（id=1520）
 
-- Python 3.12+
-- Chrome 或 Firefox 浏览器
+## 从源码运行
 
-## 安装与运行（Windows）
+需要 Python 3.12+ 和 [uv](https://docs.astral.sh/uv/)。
 
-### 方式一：使用 uv（推荐）
-
-[uv](https://docs.astral.sh/uv/) 会自动管理 Python 版本和虚拟环境：
-
-```powershell
-# 1. 安装 uv（若未安装）
+```bash
+# 安装 uv（Windows）
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-# 2. 在项目目录安装依赖
-cd ZCST_FEE
-uv sync
+# 安装 uv（Linux/macOS）
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 3. 运行
+# 安装依赖并运行
+uv sync
 uv run python main.py
 ```
 
-或者直接双击 `run.bat` 文件。
+## 本地编译
 
-### 方式二：使用 pip
-
-```powershell
-cd ZCST_FEE
-pip install -r requirements.txt
-python main.py
+```bash
+uv sync --group build
+uv run python build.py
+# 输出: dist/zcst-fee.exe（Windows）或 dist/zcst-fee（Linux）
 ```
 
-> **注意**：如果使用 VS Code，请确保在右下角选择 `.venv` 中的 Python 解释器（`.venv\Scripts\python.exe`），而不是系统 Python，否则会因找不到依赖包而报错。
+## 发布新版本
 
-## 使用步骤
+推送 `v` 开头的 tag 即可自动触发 GitHub Actions 编译并创建 Release：
 
-## 使用步骤
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
-程序会：
-1. 自动获取服务端配置
-2. **弹出浏览器窗口** → 显示统一认证页面（含验证码）
-3. 用户在浏览器中输入账号、密码、验证码，完成登录
-4. 程序自动捕获 Cookie，关闭浏览器
-5. 拉取所有应用列表，搜索水电相关应用
-6. 用户选择目标应用后，获取签名并打开页面
 7. 页面内容保存到 `fee_page.html`
-
-## Cookie 缓存
-
-登录成功后 Cookie 会保存到 `cookies.json`，下次运行时自动尝试复用，避免重复登录。
-如果 Cookie 过期，删除 `cookies.json` 重新登录即可。
 
 ## 文件说明
 
